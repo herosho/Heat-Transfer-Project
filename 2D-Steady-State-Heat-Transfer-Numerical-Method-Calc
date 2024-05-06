@@ -1,0 +1,250 @@
+import matlab.engine
+import matplotlib.pyplot as plt
+from tkinter import *
+import math
+
+
+# Create GUI with title
+window = Tk()
+window.geometry("1000x450")
+window.title("Rectangle 2D Heat Transfer Analysis")
+
+geo_title = Label(text="GEOMETRY INFO", font=50)
+geo_title.grid(row=0, column=0, sticky=W)
+
+L_size1 = Label(text="Enter the Width (m):", font=40)
+L_size1.grid(row=1, column=0, sticky=W)
+E_size1 = Entry(window)
+E_size1.grid(row=1, column=1)
+
+L_node1 = Label(text="Enter nodes for Width:", font=40, anchor="w")
+L_node1.grid(row=2, column=0, sticky=W)
+E_node1 = Entry(window)
+E_node1.grid(row=2, column=1)
+
+L_size2 = Label(text="Enter the Height (m):", font=40, anchor="w")
+L_size2.grid(row=3, column=0, sticky=W)
+E_size2 = Entry(window)
+E_size2.grid(row=3, column=1)
+
+L_node2 = Label(text="Enter nodes for Height:", font=40, anchor="w")
+L_node2.grid(row=4, column=0, sticky=W)
+E_node2 = Entry(window)
+E_node2.grid(row=4, column=1)
+
+
+mat_prop = Label(text="MATERIAL PROPERTIES", font=50)
+mat_prop.grid(row=0, column=3, sticky=W)
+
+K_value = Label(text="Enter thermal conductivity coefficient:", font=40)
+K_value.grid(row=1, column=3, sticky=W)
+E_k_value = Entry(window)
+E_k_value.grid(row=1, column=4)
+
+eps_value = Label(text="Enter emissivity value:", font=40)
+eps_value.grid(row=2, column=3, sticky=W)
+E_eps_value = Entry(window)
+E_eps_value.grid(row=2, column=4)
+
+heat_gen_value = Label(text="Enter heat generation value:", font=40)
+heat_gen_value.grid(row=3, column=3, sticky=W)
+E_heat_gen_value = Entry(window)
+E_heat_gen_value.grid(row=3, column=4)
+
+empty_space = Label(text="")
+empty_space.grid(row=8, column=0)
+
+
+temp_values = Label(text="INITIAL TEMPERATURES", font=50)
+temp_values.grid(row=9, column=0)
+
+L_surftemp = Label(text="Enter surface temp:", font=40)
+L_surftemp.grid(row=10, column=0, sticky=W)
+E_surftemp_value = Entry(window)
+E_surftemp_value.grid(row=10, column=1)
+
+L_ambtemp = Label(text="Enter ambient temp:", font=40, anchor="w")
+L_ambtemp.grid(row=11, column=0, sticky=W)
+E_ambtemp_value = Entry(window)
+E_ambtemp_value.grid(row=11, column=1)
+
+def update_close():
+    # Retrieve values from Entry widgets and store them in variables
+    width_x = float(E_size1.get())
+    nodes_x = int(E_node1.get())
+    height_y = float(E_size2.get())
+    nodes_y = int(E_node2.get())
+    k_value = float(E_k_value.get())
+    epsilon = float(E_eps_value.get())
+    e_dot = float(E_heat_gen_value.get())
+#   surftemp = float(E_surftemp_value.get())
+    t_ambient = float(E_ambtemp_value.get())
+
+    # Start MATLAB engine$ python -m pip install matlabengine==23.2.3
+    eng = matlab.engine.start_matlab()
+
+    # MATLAB code as a string
+    matlab_code = f"""
+            %MATLAB code to solve the 2D steady state heat conduction equation using iterative solvers.
+            clear all; close all; clc; clear;
+            format short g;
+            format compact;
+
+            % v3.1 
+            % i = 1: nodes_x instead of i = 1: width_x
+            % j = i: nodes_y instead of j = 1: height_y
+
+
+            %User Inputs
+
+                %Solid Size & Node Density
+                width_x = {width_x};
+                nodes_x = {nodes_x};
+    
+                height_y = {height_y};
+                nodes_y  = {nodes_y};
+    
+                %initial condition - solid 
+                k        = {k_value};
+                e_dot    = {e_dot};      %energy generation in solid
+    
+                %initial condition - Ambient
+                t_ambient = {t_ambient};
+                epsilon   = {epsilon};
+
+            %Constant Value
+                sigma = 5.67*10^(-8);
+
+            %defining the boundary
+                dx = width_x / nodes_x;
+                dy = height_y/nodes_y;
+
+            %matrix with initial temperature
+                syms t [nodes_x nodes_y] 
+                t_initial = t;
+
+            for i = 1:nodes_x     % x is edge-1 on both ends
+                for j = 1:nodes_y %from bottom (bottom is insulated) up to (y max - 1)
+
+                %CORNERS
+                    %for (1, nodes_y)         - Top Left
+                    if i == 1 && j == nodes_y
+                        t(i,j) = epsilon*sigma*(dx/2 + dy/2) *(t_ambient^4 - t(i,j)^4)      ...
+                            + k*(dy/2)* (t(i+1,j) - t(i,j)) / dx    ...
+                            + k*(dx/2)* ( t(i,j-1) - t(i,j) ) / dy  ...
+                            + e_dot*(dx/2)*(dy/2);
+
+                        % for (1,1)         - Bottom Left 
+                        elseif i == 1 && j == 1
+                            t(i,j) = epsilon*sigma*(dx/2 + dy/2)*(t_ambient^4- t(i,j)^4)...
+                                + k*(dx/2)* ( t(i,j+1) - t(i,j) ) / dy  ...
+                                + k*(dy/2)*( t(i+1,j) - t(i,j) )/dx   ...
+                                + e_dot*(dx/2)*(dy/2);
+
+                        %for (x max, nodes_y) - Top Right 
+                        elseif i == nodes_x && j == nodes_y
+                            t(i,j) = epsilon*sigma*(dx/2 + dy/2) *(t_ambient^4 - t(i,j)^4)  ...
+                                + k*(dx/2)* ( t(i,j-1) - t(i,j) ) / dy  ...
+                                + k*(dy/2) * (t(i-1,j) - t(i,j)) / dx   ...
+                                + e_dot*(dx/2)*(dy/2);
+
+                        %for (nodes_x, 1)     - Bottom Right 
+                        elseif i == nodes_x && j == 1
+                            t(i,j) = epsilon*sigma*(dx/2 + dy/2) *(t_ambient^4 - t(i,j)^4)  ...
+                                + k*(dx/2)* ( t(i,j+1) - t(i,j) ) / dy  ...
+                                + k*(dy/2) * (t(i-1,j) - t(i,j)) / dx   ...
+                                + e_dot*(dx/2)*(dy/2);
+
+                %WALLS
+                        %for left wall      - Left Wall (exclude corners)
+                        elseif i==1 &&       (j>1 && j<nodes_y)
+                            t(i,j) = epsilon*sigma*dy*(t_ambient^4 - t(i,j)^4)  ...
+                                + k*(dx/2)* ( t(i, j+1)-t(i,j)) / dy        ...
+                                + k*(dy)* (t(i+1,j) - t(i,j)) / dx          ...
+                                + k*(dx/2)* (t(i, j-1) - t(i,j)) / dy   ...
+                                + e_dot*0.5*dx*dy;
+
+                        %for right wall     - Right Wall (exclude corners)
+                        elseif i==nodes_x && (j>1 && j<nodes_y)
+                            t(i,j) = k*(dy)* (t(i-1,j) - t(i,j)) / dx           ...
+                                + k*(dx/2)* ( t(i, j+1)-t(i,j)) / dy        ...
+                                + epsilon*sigma*dy*(t_ambient^4 - t(i,j)^4)  ...
+                                + k*(dx/2)* (t(i, j-1) - t(i,j)) / dy   ...
+                                + e_dot*0.5*dx*dy;
+
+                        %for top wall       - Top Wall  (exclude corners)
+                        elseif (i>1 && i<nodes_x) && j== nodes_y
+                            t(i,j) = k*(dy/2)*(t(i-1,j) - t(i,j)) / dx          ...
+                                + epsilon*sigma*dx*(t_ambient^4-t(i,j)^4)   ...
+                                + k*(dy/2)*(t(i+1,j) - t(i,j)) / dx         ...
+                                + k*dx* (t(i, j-1) - t(i,j) ) / dy      ...
+                                + e_dot*0.5*dx*dy;
+
+                        %for Bottom wall    - Bottom Wall (exclude corners)
+                        elseif i>1 && i<nodes_x && j== 1
+                            t(i,j) = k*(dy/2)*(t(i-1,j) - t(i,j)) / dx          ...
+                                + epsilon*sigma*dx*(t_ambient^4-t(i,j)^4)   ...
+                                + k*(dy/2)*(t(i+1,j) - t(i,j)) / dx         ...
+                                + k*dx* (t(i, j+1) - t(i,j) ) / dy      ...
+                                + e_dot*0.5*dx*dy;
+
+                %ELSE
+                        %all other interior nodes
+                        else
+                            t(i,j) = t(i-1, j)                                  ...
+                                + t(i, j+1)                                 ...
+                                + t(i+1, j)                                 ...
+                                + t(i, j-1)                             ...
+                                - (t(i,j))*4          ...
+                                + e_dot*dx*dy/k;
+                    end
+                end
+            end
+
+            final = solve([t], t_initial);            %solve the Matrix & create Structure
+
+            tablesss = struct2table(final);      %convert from structure to table
+            finalfinal = table2array(tablesss);  %convert from table to matrix
+
+            temps = double(finalfinal);          %completes the calculation
+
+            final_temp= reshape(temps,[nodes_x,nodes_y]); %output the final matrix
+
+            """
+
+    # Evaluate MATLAB code
+    eng.eval(matlab_code, nargout=0)
+
+    # Retrieve the final matrix back into Python
+    final_temp = eng.workspace['final_temp']
+
+    # Stop MATLAB engine
+    eng.quit()
+
+    close_window()
+
+    # Plot the matrix using imshow
+    plt.imshow(final_temp, cmap='cividis', extent=[0, nodes_x, 0, nodes_y])
+
+    # Add colorbar for reference
+    plt.colorbar(label='Temperature')
+    plt.title('Temperature Contour')
+    plt.xlabel('Nodes X')
+    plt.ylabel('Nodes Y')
+
+    # making the plot show only Integers
+    minimum_y = 0
+    maximum_ele = nodes_y
+    new_list = range(math.floor(0), math.ceil(nodes_y) + 1)
+    plt.yticks(new_list)
+
+    print(final_temp)
+    plt.show()
+
+StartCalculation = Button(window, text="Start Calculation", command=update_close)
+StartCalculation.grid(row=11, column=4)
+
+def close_window():
+    window.destroy()
+
+window.mainloop()
